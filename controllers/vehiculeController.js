@@ -1,4 +1,31 @@
 import Vehicule from "../models/vehiculeModel.js";
+import { uploadBufferToCloudinary } from "../utils/uploadToCloudinary.js";
+
+/**
+ * Helpers: parse types coming from multipart/form-data (strings)
+ */
+const toBool = (v) => {
+  if (v === undefined) return undefined;
+  if (typeof v === "boolean") return v;
+  if (typeof v === "string") return v.toLowerCase() === "true";
+  return undefined;
+};
+
+const toNumber = (v) => {
+  if (v === undefined) return undefined;
+  const n = Number(v);
+  return Number.isNaN(n) ? undefined : n;
+};
+
+const parseJsonMaybe = (v) => {
+  if (v === undefined) return undefined;
+  if (typeof v !== "string") return v; // already object/array
+  try {
+    return JSON.parse(v);
+  } catch {
+    return v; // keep as string if not JSON
+  }
+};
 
 // ➕ Ajouter un véhicule
 export const addVehicule = async (req, res) => {
@@ -7,16 +34,27 @@ export const addVehicule = async (req, res) => {
       nom,
       marque,
       type,
-      prixParJour,
       description,
-      vedette,
-      disponible,
-      specifications,
     } = req.body;
 
-    const images = req.files?.map((file) =>
-      file.path.replace(/\\/g, "/")
-    ) || [];
+    // Convert types
+    const prixParJour = toNumber(req.body.prixParJour);
+    const vedette = toBool(req.body.vedette) ?? false;
+    const disponible = toBool(req.body.disponible) ?? true;
+
+    // specifications can be JSON string OR object (specifications[seats] style)
+    const specifications = parseJsonMaybe(req.body.specifications);
+
+    // Upload vers Cloudinary
+    const files = req.files || [];
+    const uploaded = await Promise.all(
+      files.map((file) =>
+        uploadBufferToCloudinary(file.buffer, { folder: "uploads/vehicules" })
+      )
+    );
+
+    // schema: tableau de strings (URLs)
+    const images = uploaded.map((r) => r.secure_url);
 
     const vehicule = new Vehicule({
       nom,
@@ -31,7 +69,6 @@ export const addVehicule = async (req, res) => {
     });
 
     await vehicule.save();
-
     res.json({ success: true, vehicule });
   } catch (error) {
     console.log("❌ ERROR ADD :", error);
@@ -39,28 +76,58 @@ export const addVehicule = async (req, res) => {
   }
 };
 
+// ✏️ Modifier un véhicule (images: garder existantes + ajouter nouvelles)
 export const editVehicule = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const imagesExistantes = req.body.imagesExistantes
-      ? JSON.parse(req.body.imagesExistantes)
-      : [];
+    // imagesExistantes: JSON string OR array
+    let imagesExistantes = [];
+    if (req.body.imagesExistantes) {
+      imagesExistantes = Array.isArray(req.body.imagesExistantes)
+        ? req.body.imagesExistantes
+        : JSON.parse(req.body.imagesExistantes);
+    }
 
-    const newImages = req.files
-      ? req.files.map((file) => file.path.replace(/\\/g, "/"))
-      : [];
+    // Upload nouvelles images vers Cloudinary
+    const files = req.files || [];
+    const uploaded = await Promise.all(
+      files.map((file) =>
+        uploadBufferToCloudinary(file.buffer, { folder: "uploads/vehicules" })
+      )
+    );
+    const newImages = uploaded.map((r) => r.secure_url);
 
     const imagesFinales = [...imagesExistantes, ...newImages];
 
-    const updated = await Vehicule.findByIdAndUpdate(
-      id,
-      {
-        ...req.body,
-        images: imagesFinales,
-      },
-      { new: true }
-    );
+    // Remove technical fields and normalize types
+    const {
+      imagesExistantes: _ignore,
+      prixParJour: prixRaw,
+      vedette: vedetteRaw,
+      disponible: dispoRaw,
+      specifications: specsRaw,
+      ...restBody
+    } = req.body;
+
+    const update = {
+      ...restBody,
+      images: imagesFinales,
+    };
+
+    const prix = toNumber(prixRaw);
+    if (prix !== undefined) update.prixParJour = prix;
+
+    const ved = toBool(vedetteRaw);
+    if (ved !== undefined) update.vedette = ved;
+
+    const dispo = toBool(dispoRaw);
+    if (dispo !== undefined) update.disponible = dispo;
+
+    const specs = parseJsonMaybe(specsRaw);
+    if (specs !== undefined) update.specifications = specs;
+
+    const updated = await Vehicule.findByIdAndUpdate(id, update, { new: true });
 
     res.json({ success: true, vehicule: updated });
   } catch (error) {
@@ -72,6 +139,8 @@ export const editVehicule = async (req, res) => {
 // 🗑 Supprimer un véhicule
 export const deleteVehicule = async (req, res) => {
   try {
+    // Ici tu supprimes juste le doc.
+    // (Optionnel) pour supprimer sur Cloudinary aussi, stocke publicId en DB.
     await Vehicule.findByIdAndDelete(req.params.id);
     res.json({ success: true, message: "Véhicule supprimé" });
   } catch (error) {
@@ -101,19 +170,20 @@ export const getVehiculeBySlug = async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 };
+
+// 📌 Véhicules similaires
 export const getRelatedVehicules = async (req, res) => {
   try {
-    const current = await Vehicule.findOne({ slug: req.params.slug })
-    if (!current) return res.json({ success: false, vehicules: [] })
+    const current = await Vehicule.findOne({ slug: req.params.slug });
+    if (!current) return res.json({ success: false, vehicules: [] });
 
     const related = await Vehicule.find({
       type: current.type,
-      _id: { $ne: current._id }
-    }).limit(6)
+      _id: { $ne: current._id },
+    }).limit(6);
 
-    res.json({ success: true, vehicules: related })
+    res.json({ success: true, vehicules: related });
   } catch (error) {
-    res.json({ success: false, message: error.message })
+    res.json({ success: false, message: error.message });
   }
-}
-
+};

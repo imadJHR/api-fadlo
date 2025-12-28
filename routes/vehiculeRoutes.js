@@ -1,45 +1,34 @@
 import express from "express";
-import multer from "multer";
-import path from "path";
 import {
   addVehicule,
   editVehicule,
   deleteVehicule,
   getAllVehicules,
   getVehiculeBySlug,
-  getRelatedVehicules
+  getRelatedVehicules,
 } from "../controllers/vehiculeController.js";
+
+import { uploadVehicules } from "../middleware/uploadVehicules.js"
+// adapte le chemin selon ton projet (middleware, config, etc.)
 
 const router = express.Router();
 
-// 📁 Multer storage
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, "uploads/vehicules");
-  },
-  filename: (req, file, cb) => {
-    const unique = Date.now() + "-" + file.originalname;
-    cb(null, unique);
-  },
-});
-
-const upload = multer({ storage });
-
 // ➕ Ajouter
-router.post("/", upload.array("images", 10), addVehicule);
+router.post("/", uploadVehicules, addVehicule);
 
 // ✏ Modifier
-router.put("/:id", upload.array("images", 10), editVehicule);
+router.put("/:id", uploadVehicules, editVehicule);
 
 // 🗑 Supprimer
 router.delete("/:id", deleteVehicule);
-router.get("/related/:slug", getRelatedVehicules)
 
+// 🔗 Related
+router.get("/related/:slug", getRelatedVehicules);
 
 // 📌 Tous
 router.get("/", getAllVehicules);
 
-// 📌 Par slug
+// 📌 Par slug (toujours en dernier car route dynamique)
 router.get("/:slug", getVehiculeBySlug);
 
 export default router;

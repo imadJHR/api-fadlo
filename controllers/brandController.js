@@ -5,9 +5,8 @@ export const addBrand = async (req, res) => {
   try {
     const { title } = req.body;
 
-    const image = req.file
-      ? req.file.path.replace(/\\/g, "/")
-      : null;
+    // vient du middleware uploadBrandCloudinary
+    const image = req.uploadedImage?.url || null;
 
     if (!image) {
       return res.json({ success: false, message: "Brand image required" });
@@ -28,9 +27,8 @@ export const editBrand = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const image = req.file
-      ? req.file.path.replace(/\\/g, "/")
-      : req.body.image;
+    // si nouvelle image uploadée, on prend celle-là, sinon on garde l’ancienne envoyée dans body
+    const image = req.uploadedImage?.url || req.body.image;
 
     const updated = await Brand.findByIdAndUpdate(
       id,
@@ -51,6 +49,8 @@ export const editBrand = async (req, res) => {
 // 🗑 DELETE BRAND
 export const deleteBrand = async (req, res) => {
   try {
+    // Ici on supprime seulement le document.
+    // Pour supprimer aussi l'image Cloudinary, il faut stocker publicId dans la DB.
     await Brand.findByIdAndDelete(req.params.id);
     res.json({ success: true, message: "Brand deleted" });
   } catch (error) {

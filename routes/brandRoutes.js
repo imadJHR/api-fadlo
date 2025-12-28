@@ -1,5 +1,4 @@
 import express from "express";
-import multer from "multer";
 import {
   addBrand,
   editBrand,
@@ -7,24 +6,15 @@ import {
   getAllBrands,
 } from "../controllers/brandController.js";
 
+import { uploadBrandCloudinary } from "../middleware/uploadBrandCloudinary.js";
+
 const router = express.Router();
 
-// Multer storage config
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, "uploads"),
-  filename: (req, file, cb) => {
-    const unique = Date.now() + "-" + file.originalname;
-    cb(null, unique);
-  },
-});
-
-const upload = multer({ storage });
-
 // ➕ CREATE
-router.post("/", upload.single("image"), addBrand);
+router.post("/", uploadBrandCloudinary, addBrand);
 
 // ✏ UPDATE
-router.put("/:id", upload.single("image"), editBrand);
+router.put("/:id", uploadBrandCloudinary, editBrand);
 
 // 🗑 DELETE
 router.delete("/:id", deleteBrand);
