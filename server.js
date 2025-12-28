@@ -15,21 +15,22 @@ dotenv.config();
 const app = express();
 
 /**
- * ✅ CORS OPEN (tout ouvrir)
- * - origin: "*"
- * - credentials: false (obligatoire avec *)
+ * ✅ CORS géré par Express (ouvre tout)
+ * IMPORTANT: Désactive CORS dans AWS Function URL, sinon tu auras "*, *".
  */
 const corsOptions = {
   origin: "*",
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"],
+  exposedHeaders: ["Content-Length"],
   credentials: false,
+  maxAge: 86400, // cache preflight 24h (optionnel)
 };
 
 // ✅ CORS avant les routes
 app.use(cors(corsOptions));
 
-// ✅ Preflight partout (même config)
+// ✅ Preflight partout (Express 5 compatible)
 app.options(/.*/, cors(corsOptions));
 
 // Body parsers
